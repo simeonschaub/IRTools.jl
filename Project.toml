@@ -4,7 +4,10 @@ authors = ["Mike J Innes <mike.j.innes@gmail.com>"]
 version = "0.4.1"
 
 [deps]
+BugReporting = "bcf9a6e7-4020-453c-b88e-690564246bb8"
+Debugger = "31a5f54b-26ea-5ae9-a837-f05ce5417438"
 InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
+JuliaInterpreter = "aa1ae85d-cabe-5617-a682-6adf51b2e16a"
 MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 

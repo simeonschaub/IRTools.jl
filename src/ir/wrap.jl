@@ -21,7 +21,8 @@ function IRCode(ir::IR)
   for b in IRTools.blocks(ir)
     if b.id == 1
       for (i, arg) in enumerate(IRTools.arguments(b))
-        defs[arg] = Core.Compiler.Argument(i)
+        #defs[arg] = Core.Compiler.Argument(i)
+        defs[arg] = Core.SlotNumber(i)
       end
     else
       @assert isempty(BasicBlock(b).args)
@@ -74,7 +75,7 @@ function blockstarts(ci::CodeInfo)
     if isexpr(ex, :gotoifnot)
       push!(bs, ex.args[2])
       terminator = true
-    elseif isexpr(ex, GotoNode, :return)
+    elseif ex isa GotoNode || isreturn(ex)
       ex isa GotoNode && push!(bs, ex.label)
       i < length(ci.code) && push!(bs, i+1)
       terminator = false
@@ -88,6 +89,14 @@ end
 
 # TODO more informative names, while avoiding clashes.
 slotname(ci, s) = Symbol(:_, s.id)
+
+if isdefined(Core, :ReturnNode)
+    isreturn(@nospecialize(ex)) = (@assert !isexpr(ex, :return); ex isa ReturnNode)
+    retval(@nospecialize(ex)) = ex.val
+else
+    isreturn(@nospecialize(ex)) = isexpr(ex, :return)
+    retval(@nospecialize(ex)) = ex.args[1]
+end
 
 function IR(ci::CodeInfo, nargs::Integer; meta = nothing)
   bs = blockstarts(ci)
@@ -113,8 +122,8 @@ function IR(ci::CodeInfo, nargs::Integer; meta = nothing)
     elseif isexpr(ex, :gotoifnot)
       branch!(ir, findfirst(==(ex.args[2]), bs)+1,
               unless = rename(ex.args[1]))
-    elseif isexpr(ex, :return)
-      return!(ir, rename(ex.args[1]))
+    elseif isreturn(ex)
+      return!(ir, rename(retval(ex)))
     else
       _rename[Core.SSAValue(i)] = push!(ir, IRTools.stmt(rename(ex), line = ci.codelocs[i]))
     end

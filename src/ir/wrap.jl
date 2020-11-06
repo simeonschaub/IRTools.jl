@@ -3,8 +3,8 @@ module Wrap
 using MacroTools: isexpr, prewalk
 
 using ..Inner, ..IRTools
-import ..Inner: IR, Variable, Statement, Branch, BasicBlock, Meta, block!,
-  unreachable, varmap, argument!, branch!, return!
+import ..Inner: IR, Variable, Statement, Branch, BasicBlock, Meta, Slot,
+  block!, unreachable, varmap, argument!, branch!, return!
 import Core: CodeInfo, GotoNode, SSAValue
 import Core.Compiler: IRCode, CFG, GotoIfNot, ReturnNode, StmtRange
 
@@ -12,7 +12,9 @@ import Core.Compiler: IRCode, CFG, GotoIfNot, ReturnNode, StmtRange
   import Core.Compiler: InstructionStream
 end
 
-unvars(ex) = prewalk(x -> x isa Variable ? SSAValue(x.id) : x, ex)
+unvars(ex) = prewalk(ex) do x
+    return x isa Variable ? SSAValue(x.id) : x #isa Inner.Slot ? Core.SlotNumber(x.id) : x
+end
 
 function IRCode(ir::IR)
   defs = Dict()
@@ -67,13 +69,22 @@ function IRCode(ir::IR)
   end
 end
 
+if isdefined(Core, :GotoIfNot)
+    isgotoifnot(@nospecialize(ex)) = (@assert !isexpr(ex, :gotoifnot); ex isa Core.GotoIfNot)
+    destruct_gotoifnot(@nospecialize(ex)) = Any[ex.cond, ex.dest]
+else
+    isgotoifnot(@nospecialize(ex)) = isexpr(ex, :gotoifnot)
+    destruct_gotoifnot(@nospecialize(ex)) = ex.args
+end
+
 function blockstarts(ci::CodeInfo)
   bs = Int[]
   terminator = false
   for i = 1:length(ci.code)
     ex = ci.code[i]
-    if isexpr(ex, :gotoifnot)
-      push!(bs, ex.args[2])
+    if isgotoifnot(ex)
+      _, dest = destruct_gotoifnot(ex)
+      push!(bs, dest)
       terminator = true
     elseif ex isa GotoNode || isreturn(ex)
       ex isa GotoNode && push!(bs, ex.label)
@@ -117,11 +128,12 @@ function IR(ci::CodeInfo, nargs::Integer; meta = nothing)
       continue
     elseif isexpr(ex, :enter)
       _rename[Core.SSAValue(i)] = push!(ir, Expr(:enter, findfirst(==(ex.args[1]), bs)+1))
-    elseif isexpr(ex, GotoNode)
+    elseif isa(ex, GotoNode)
       branch!(ir, findfirst(==(ex.label), bs)+1)
-    elseif isexpr(ex, :gotoifnot)
-      branch!(ir, findfirst(==(ex.args[2]), bs)+1,
-              unless = rename(ex.args[1]))
+    elseif isgotoifnot(ex)
+      cond, dest = destruct_gotoifnot(ex)
+      branch!(ir, findfirst(==(dest), bs)+1,
+              unless = rename(cond))
     elseif isreturn(ex)
       return!(ir, rename(retval(ex)))
     else

@@ -65,7 +65,9 @@ function slots!(ci::CodeInfo)
       ss[x] = SlotNumber(length(ci.slotnames))
     end
     ci.code[i] = MacroTools.prewalk(ci.code[i]) do x
-        x isa Core.ReturnNode ? Core.ReturnNode(f(x.val)) : f(x)
+        x isa Core.ReturnNode ? Core.ReturnNode(f(x.val)) :
+        x isa Core.GotoIfNot ? Core.GotoIfNot(f(x.cond), x.dest) :
+        f(x)
     end
   end
   return ci
